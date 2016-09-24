@@ -1,9 +1,16 @@
 import numpy as np
 
-def plot_box(bx, plt, colorstr='w'):
+def valid_box(bx):
     ymin,ymax,xmin,xmax=bx[:]
-    assert ymin<=ymax
-    assert xmin<=xmax
+    if ymin>ymax: return False
+    if xmin>xmax: return False
+    return True
+   
+def plot_box(bx, plt, colorstr='w'):
+    if not valid_box(bx):
+        print("WARNING: plot_box: not valid: %s" % box_to_str(bx))
+        return
+    ymin,ymax,xmin,xmax=bx[:]
     plt.plot([xmin,xmin,xmax,xmax,xmin],
              [ymin,ymax,ymax,ymin,ymin], colorstr)
 
@@ -22,12 +29,16 @@ def plot_box_clipped_to(bx, plt, clipbx, colorstr='w'):
         c,d=cd
         return max(a,c),min(b,d)
     
+    if not valid_box(bx):
+        print("WARNING: plot_box_clipped_to: not valid: %s" % box_to_str(bx))
+        return
+
+    if not valid_box(clipbx):
+        print("WARNING: plot_box_clipped_to: not valid: clipbx %s" % box_to_str(clipbx))
+        return
+
     ymin,ymax,xmin,xmax=bx[:]
-    assert ymin<=ymax
-    assert xmin<=xmax
     ymin_clip,ymax_clip,xmin_clip,xmax_clip=clipbx[:]
-    assert ymin_clip <= ymax_clip
-    assert xmin_clip <= xmax_clip
 
     for x in [xmin,xmax]:
         if inside(x,[xmin_clip, xmax_clip]):
@@ -111,16 +122,18 @@ def intersection_over_union(bxA, bxB):
     return inter_area/float(union_area)
 
 def extract_box(img,bx):
+    if not valid_box(bx):
+        print("WARNING: extract_box: not valid: bx %s" % box_to_str(bx))
+        return None
+
     ymin,ymax,xmin,xmax=bx[:]
-    assert ymin<=ymax
-    assert xmin<=xmax
     if ymin==ymax or xmin==xmax:
         return None
     return  img[ymin:ymax,xmin:xmax].copy()
 
 def max_in_box(img, box):
+    if not valid_box(box): return None
     ymin,ymax,xmin,xmax=box[:]
-    if ymin>= ymax or xmin >= xmax: return None
     roi = img[ymin:ymax,xmin:xmax]
     return np.max(roi)
 

@@ -1,6 +1,15 @@
 import numpy as np
 
 def make_grid(imgs, ncols=None, verbose=False, idx2bbox=None):
+    old_len = len(imgs)
+    imgs = [img for img in imgs if img is not None]
+    if len(imgs) < old_len:
+        print("WARNING: make_grid: %d of %d imgs are None" % 
+              (old_len-len(imgs), old_len))
+    if len(imgs)==0:
+        print("ERROR: returning empty grid")
+        return np.zeros((10,10))
+
     img_rows = [img.shape[0] for img in imgs]
     img_cols = [img.shape[1] for img in imgs]
     img_mxrow = max(img_rows)
