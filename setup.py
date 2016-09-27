@@ -8,4 +8,6 @@ setup(name='psana-mlearn',
       author_email='davidsch@slac.stanford.edu',
       license='Stanford',
       packages=['psmlearn'],
+      test_suite='nose.collector',
+      tests_require=['nose'],
       zip_safe=False)
