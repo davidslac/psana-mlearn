@@ -26,7 +26,7 @@ class vgg16:
         self.imgs = imgs
         self.stop_at_fc2=stop_at_fc2
         self.trainable=trainable
-        
+        self.after_relus = []
         self.convlayers(trainable)
         self.fc_layers(trainable)
         if not self.stop_at_fc2:
@@ -50,6 +50,7 @@ class vgg16:
                                  trainable=trainable, name='biases')
             out = tf.nn.bias_add(conv, biases)
             self.conv1_1 = tf.nn.relu(out, name=scope)
+            self.after_relus.append(self.conv1_1)
             self.parameters += [kernel, biases]
 
         # conv1_2
@@ -62,6 +63,7 @@ class vgg16:
                                  trainable=trainable, name='biases')
             out = tf.nn.bias_add(conv, biases)
             self.conv1_2 = tf.nn.relu(out, name=scope)
+            self.after_relus.append(self.conv1_2)
             self.parameters += [kernel, biases]
 
         # pool1
@@ -81,6 +83,7 @@ class vgg16:
                                  trainable=trainable, name='biases')
             out = tf.nn.bias_add(conv, biases)
             self.conv2_1 = tf.nn.relu(out, name=scope)
+            self.after_relus.append(self.conv2_1)
             self.parameters += [kernel, biases]
 
         # conv2_2
@@ -93,6 +96,7 @@ class vgg16:
                                  trainable=trainable, name='biases')
             out = tf.nn.bias_add(conv, biases)
             self.conv2_2 = tf.nn.relu(out, name=scope)
+            self.after_relus.append(self.conv2_2)
             self.parameters += [kernel, biases]
 
         # pool2
@@ -113,6 +117,7 @@ class vgg16:
                                  trainable=trainable, name='biases')
             out = tf.nn.bias_add(conv, biases)
             self.conv3_1 = tf.nn.relu(out, name=scope)
+            self.after_relus.append(self.conv3_1)
             self.parameters += [kernel, biases]
 
         # conv3_2
@@ -125,6 +130,7 @@ class vgg16:
                                  trainable=trainable, name='biases')
             out = tf.nn.bias_add(conv, biases)
             self.conv3_2 = tf.nn.relu(out, name=scope)
+            self.after_relus.append(self.conv3_2)
             self.parameters += [kernel, biases]
 
         # conv3_3
@@ -137,6 +143,7 @@ class vgg16:
                                  trainable=trainable, name='biases')
             out = tf.nn.bias_add(conv, biases)
             self.conv3_3 = tf.nn.relu(out, name=scope)
+            self.after_relus.append(self.conv3_3)
             self.parameters += [kernel, biases]
 
         # pool3
@@ -155,6 +162,7 @@ class vgg16:
                                  trainable=trainable, name='biases')
             out = tf.nn.bias_add(conv, biases)
             self.conv4_1 = tf.nn.relu(out, name=scope)
+            self.after_relus.append(self.conv4_1)
             self.parameters += [kernel, biases]
 
         # conv4_2
@@ -166,6 +174,7 @@ class vgg16:
                                  trainable=trainable, name='biases')
             out = tf.nn.bias_add(conv, biases)
             self.conv4_2 = tf.nn.relu(out, name=scope)
+            self.after_relus.append(self.conv4_2)
             self.parameters += [kernel, biases]
 
         # conv4_3
@@ -177,6 +186,7 @@ class vgg16:
                                  trainable=trainable, name='biases')
             out = tf.nn.bias_add(conv, biases)
             self.conv4_3 = tf.nn.relu(out, name=scope)
+            self.after_relus.append(self.conv4_3)
             self.parameters += [kernel, biases]
 
         # pool4
@@ -195,6 +205,7 @@ class vgg16:
                                  trainable=trainable, name='biases')
             out = tf.nn.bias_add(conv, biases)
             self.conv5_1 = tf.nn.relu(out, name=scope)
+            self.after_relus.append(self.conv5_1)
             self.parameters += [kernel, biases]
 
         # conv5_2
@@ -206,6 +217,7 @@ class vgg16:
                                  trainable=trainable, name='biases')
             out = tf.nn.bias_add(conv, biases)
             self.conv5_2 = tf.nn.relu(out, name=scope)
+            self.after_relus.append(self.conv5_2)
             self.parameters += [kernel, biases]
 
         # conv5_3
@@ -217,6 +229,7 @@ class vgg16:
                                  trainable=trainable, name='biases')
             out = tf.nn.bias_add(conv, biases)
             self.conv5_3 = tf.nn.relu(out, name=scope)
+            self.after_relus.append(self.conv5_3)
             self.parameters += [kernel, biases]
 
         # pool5
@@ -238,6 +251,7 @@ class vgg16:
             pool5_flat = tf.reshape(self.pool5, [-1, shape])
             fc1l = tf.nn.bias_add(tf.matmul(pool5_flat, fc1w), fc1b)
             self.fc1 = tf.nn.relu(fc1l)
+            self.after_relus.append(self.fc1)
             self.parameters += [fc1w, fc1b]
 
         # fc2
@@ -249,6 +263,8 @@ class vgg16:
                                  trainable=trainable, name='biases')
             fc2l = tf.nn.bias_add(tf.matmul(self.fc1, fc2w), fc2b)
             self.fc2 = tf.nn.relu(fc2l)
+            self.after_relus.append(self.fc2)
+
             self.parameters += [fc2w, fc2b]
 
         if self.stop_at_fc2:
