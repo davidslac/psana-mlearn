@@ -12,3 +12,5 @@ from . import util
 from . tensorflow_train import TensorFlowTrainer
 from . models import Model
 from . saliencymaps import SaliencyMap
+from . plot import plotRowsLabelSort
+from . pipeline import *

@@ -3,6 +3,7 @@ from __future__ import division
 from __future__ import print_function
 
 import numpy as np
+import h5py
 
 def is_integral(dtype):
     return dtype in  [np.int, 
@@ -23,3 +24,23 @@ def hcat_load(h5, dsets, include):
     X = np.hstack([h5[dset][:] for dset in dsets])
     return X[selIdx,:]
                 
+
+def dict2h5(output_file, data):
+    h5 = h5py.File(output_file,'w')
+    for ky, val in data.iteritems():
+        h5[ky]=val
+    h5.close()
+
+def h52dict(input_file):
+    h5 = h5py.File(input_file,'r')
+    res = {}
+    for ky in h5.keys():
+        try:
+            res[ky]=h5[ky][:]
+        except:
+            try:
+                res[ky]=h5[ky].value
+            except:
+                sys.stderr.write('WARNING: h5dict - root key=%s for file=%s is not data, skipping' % (ky, input_file))
+    h5.close()
+    return res

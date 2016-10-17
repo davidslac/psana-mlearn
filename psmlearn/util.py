@@ -2,8 +2,19 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import sys
 import math
 import numpy as np
+
+def logTrace(hdr, msg, flag=True):
+    if not flag: return
+    print("TRACE %s: %s" % (hdr,msg))
+    sys.stdout.flush()
+
+def logDebug(hdr, msg, flag=True):
+    if not flag: return
+    print("DBG %s: %s" % (hdr,msg))
+    sys.stdout.flush()
 
 def convert_to_one_hot(labels, numLabels):
     '''converts a 1D integer vector to one hot labeleling.
