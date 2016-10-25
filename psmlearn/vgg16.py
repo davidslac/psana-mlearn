@@ -33,7 +33,27 @@ class vgg16:
             self.probs = tf.nn.softmax(self.fc3l)
         if weights is not None and sess is not None:
             self.load_weights(weights, sess)
-
+        self.layer_name_to_op = {'conv1_1':self.conv1_1,
+                                 'conv1_2':self.conv1_2,
+                                 'pool1':self.pool1,
+                                 'conv2_1':self.conv2_1,
+                                 'conv2_2':self.conv2_2,
+                                 'pool2':self.pool2,
+                                 'conv3_1':self.conv3_1,
+                                 'conv3_2':self.conv3_2,
+                                 'conv3_3':self.conv3_3,
+                                 'pool3':self.pool3,
+                                 'conv4_1':self.conv4_1,
+                                 'conv4_2':self.conv4_2,
+                                 'conv4_3':self.conv4_3,
+                                 'pool4':self.pool4,
+                                 'conv5_1':self.conv5_1,
+                                 'conv5_2':self.conv5_2,
+                                 'conv5_3':self.conv5_3,
+                                 'pool5':self.pool5,
+                                 'fc1':self.fc1,
+                                 'fc2':self.fc2}
+                                 
 
     def convlayers(self, trainable):
         self.parameters = []
@@ -290,6 +310,10 @@ class vgg16:
             print( i, k, np.shape(weights[k]))
             sess.run(self.parameters[i].assign(weights[k]))
 
+    def get_model_layers(self, sess, imgs, layer_names):
+        ops = [self.layer_name_to_op[name] for name in layer_names]
+        return sess.run(ops, feed_dict={self.imgs:imgs})
+    
 def load_image_for_vgg16(dest, img, dbg=False):
     assert dest.shape == (224,224,3)
     assert dest.dtype == np.float32
@@ -308,35 +332,52 @@ def load_image_for_vgg16(dest, img, dbg=False):
         dest[:] = img[:]
 
     if dbg:
-        print("importing ipython - compare img and dest")
-        import IPython
-        IPython.embed()
+        import matplotlib.pyplot as plt
+        plt.ion()
+        plt.figure(figsize=(18,12))
+        plt.subplot(1,2,1)
+        plt.imshow(img, interpolation='none')
+        plt.colorbar()
+        plt.title('orig img')
+        plt.subplot(1,2,2)
+        dest2 = dest.copy()
+        dest2 /= 256.0
+        plt.imshow(dest2, interpolation='none')
+        plt.colorbar()
+        plt.title('processed img')
+        plt.figtext(0.05, 0.95, "psmlearn.load_image_for_vgg16")
+        plt.pause(.1)
     return
 
-def write_codewords(dataloader, output_fname, 
-                    weights='vgg16_weights.npz', dbg=False, force=False):
-    dataloader.loadall(reload=False)
-    dataloader.check_processed_means()
-    num_samples = dataloader.get_number_of_samples()
-    assert (not os.path.exists(output_fname)) or force, "write_codewords: output file %s exists, use --force" % output_fname
-    h5out = h5py.File(output_fname,'w')
-    dataloader.copy_to_h5(h5out)
-    sess = tf.Session()
+def create(session, weights):
     imgs = tf.placeholder(tf.float32, [None, 224, 224, 3])
+    return vgg16(imgs=imgs, weights=weights, sess=session)
+
+def write_codewords(img_iter, h5, dset_name, 
+                    weights='vgg16_weights.npz', dbg=False):
+    dataReader.loadall(reload=False)
+    dataReader.check_processed_means()
+    num_samples = dataReader.get_number_of_samples()
+    assert (not os.path.exists(output_fname)) or force, "write_codewords: output file %s exists, use --force" % output_fname
+    print("psmlearn.vgg16.write_codewords: creating file %s\n  dataReader=%r" % (output_fname, dataReader))
+    h5out = h5py.File(output_fname,'w')
+    dataReader.copy_to_h5(h5out)
+    sess = tf.Session()
 
     codeword_datasets = {}
-    for nm in dataloader.names():
-        vgg = vgg16(imgs, weights, sess)
+    for nm in dataReader.names():
         nm_codewords_1 = np.zeros((num_samples,4096), dtype=np.float32)
         nm_codewords_2 = np.zeros((num_samples,4096), dtype=np.float32)
         for row in range(num_samples):
             nm_img = np.zeros((224,224,3), dtype=np.float32)
-            load_image_for_vgg16(nm_img, dataloader.get_image(nm, row), dbg=dbg)
+            load_image_for_vgg16(nm_img, dataReader.get_image(nm, row), dbg=dbg)
             codewords = sess.run([vgg.fc1, vgg.fc2], feed_dict={vgg.imgs: [nm_img]})
             codeword1, codeword2 = codewords
             nm_codewords_1[row,:] = codeword1[:]
             nm_codewords_2[row,:] = codeword2[:]
             print("nm=%s row=%d" % (nm, row))
+            if dbg:
+                assert 'q' != raw_input('hit enter or q to quit').strip(), 'quiting'
             sys.stdout.flush()
         nm_ds1 ='%s_codeword1' % nm 
         nm_ds2 ='%s_codeword2' % nm 

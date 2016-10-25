@@ -6,15 +6,32 @@ import sys
 import math
 import numpy as np
 
-def logTrace(hdr, msg, flag=True):
-    if not flag: return
-    print("TRACE %s: %s" % (hdr,msg))
-    sys.stdout.flush()
+__TRACE_CACHE=set()
+__DEBUG_CACHE=set()
+__CACHE_SIZE=10000
 
-def logDebug(hdr, msg, flag=True):
+def _new_to_cache(msg, CACHE):
+    global __CACHE_SIZE
+    if msg in CACHE:
+        return False
+    if len(CACHE)>=__CACHE_SIZE:
+        CACHE.pop()
+    CACHE.add(msg)
+    return True
+
+def logTrace(hdr, msg, checkcache=True, flag=True):
     if not flag: return
-    print("DBG %s: %s" % (hdr,msg))
-    sys.stdout.flush()
+    msg = "TRACE %s: %s" % (hdr, msg)
+    if (not checkcache) or  _new_to_cache(msg, __TRACE_CACHE):
+        print(msg)
+        sys.stdout.flush()
+
+def logDebug(hdr, msg, checkcache=True, flag=True):
+    if not flag: return
+    msg = "DBG %s: %s" % (hdr, msg)
+    if (not checkcache) or _new_to_cache(msg, __DEBUG_CACHE):
+        print(msg)
+        sys.stdout.flush()
 
 def convert_to_one_hot(labels, numLabels):
     '''converts a 1D integer vector to one hot labeleling.

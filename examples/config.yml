@@ -1,0 +1,13 @@
+prepare_for_vgg16:
+  thresh: 154.0
+
+tsne_imgs:
+  num: 2000
+  initial_dims: 50
+  perplexity: 30.0
+
+tsne_cws:
+  num: 2000
+  initial_dims: 50
+  perplexity: 30.0
+  

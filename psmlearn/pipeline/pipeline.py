@@ -4,21 +4,18 @@ from __future__ import print_function
 
 import os
 import sys
+import copy
 import argparse
 import numpy as np
 import h5py
 import tensorflow as tf
 import logging
+import yaml
 
 import psmlearn.util as util
 import psmlearn.h5util as h5util
 
-from .step import Step
-
-def xor(A,B):
-    if A and (not B): return True
-    if (not B) and A: return True
-    return False
+from .step import Step, WHAT_DATA_GEN
 
 def _redo_flag_name(name):
     return name
@@ -29,41 +26,41 @@ def _addPipelineArgs(parser, outputdir):
     parser.add_argument('prefix', type=str, help='prefix for filenames')
     parser.add_argument('--redoall', action='store_true', help='redo all steps', default=False)
     parser.add_argument('--outputdir', type=str, help='output directory default=%s' % outputdir, default=outputdir)
+    parser.add_argument('--num', type=int, help='number of samples to do, default is all', default=0)
     parser.add_argument('--seed', type=int, help='seed for random number generators', default=39819)
     parser.add_argument('--plot', type=int, help='plot level. default=0, no plots, 1 means detailed', default=0)
     parser.add_argument('--log', type=str, help='one of DEBUG,INFO,WARN,ERROR,CRITICAL.', default='DEBUG')
     parser.add_argument('--force', action='store_true', help='overwrite existing filenames')
     parser.add_argument('--clean', action='store_true', help='delete all output for this prefix')
-    parser.add_argument('--config', type=str, help='config file for steps. a .yml file', default=None)
+    parser.add_argument('-c', '--config', type=str, help='config file for steps. a .yml file', default=None)
 
     
 class Pipeline(object):
-    '''base class for pipeline.
-    subclasses should
-    override init and call base class
-    implement 'data_stats', 'model_layers' methods that take lists of input and output files
+    '''base class for pipeline. Provides managements of steps, for re-running, and providing
+    previous step output to later steps, and global pipeline reources to the steps
     '''
     def __init__(self, outputdir='.',
                  default_data_gen=None,
                  default_data_gen_params={},
-                 description='', epilog='', sess=None, plt=None, comm=None):
+                 description='', epilog='', session=None, plt=None, comm=None):
         self.initialized = False
         self.outputdir = outputdir
         self.default_data_gen = default_data_gen
-        self.default_data_gen_params = default_data_gen_params
+        self.default_data_gen_params = default_data_gen_params        
         self.description=description
         self.epilog=epilog
-        self.sess = sess
+        self.session = session
         self.plt = plt
         self.comm = comm
 
         self.args = None
+        self.config = None
         self.steps = []
         self.name2step = {}
         self._steps_fixed = False
         
-        if self.sess is None:
-            self.sess = tf.Session()
+        if self.session is None:
+            self.session = tf.Session()
             
         self.doTrace=False
         self.doDebug=False
@@ -72,39 +69,61 @@ class Pipeline(object):
         self.parser = argparse.ArgumentParser(add_help=False)
         _addPipelineArgs(parser=self.parser, outputdir=self.outputdir)
         
-    def _add_step(self, name, inst, fn_or_method, plot, data_gen, data_gen_params):
-        assert not xor(data_gen, data_gen_params), "if supplying one of data_gen or data_gen_params, you must supply the other"
+    def _add_step(self, name, inst, fn_or_method, plot, help, what_data_gen, data_gen, data_gen_params):
+        assert what_data_gen in WHAT_DATA_GEN, "what_data_gen must be one of %s" % WHAT_DATA_GEN
+        if what_data_gen == 'NO_DATA_GEN':
+            assert not data_gen
+            assert not data_gen_params
         assert not self._steps_fixed, "steps are fixed, run() must have been called, can't add step %s" % name
-        if data_gen is None:
-            data_gen = self.default_data_gen
-            data_gen_params = self.default_data_gen_params
+
+        if what_data_gen in ['RAW_DATA_GEN', 'STEP_DATA_GEN']:
+            if not data_gen:
+                data_gen = self.default_data_gen
+            if not data_gen_params:
+                data_gen_params = self.default_data_gen_params
         output_suffixes= [name + '.h5']
         for step in self.steps:
             for suffix in step.output_suffixes:
                 assert suffix not in output_suffixes, "step %s has output suffix=%s that collides with suffix for step %s" % (name, suffix, step.name)
+        # separate step figH by 10 so they can make up to 10 plots without colliding
+        plotFigH = len(self.steps)*10
         step = Step(name=name,
                     inst=inst, fn_or_method=fn_or_method,
+                    what_data_gen=what_data_gen,
                     data_gen=data_gen,
                     data_gen_params=data_gen_params,
                     plot=plot,
+                    plotFigH=plotFigH,
                     pipeline=self,
                     output_suffixes=output_suffixes)
         self.steps.append(step)
         self.name2step[name]=step
         self.parser.add_argument('--%s' % name, action='store_true', help='just execute step %s' % name, default=False)
         
-    def add_step_fn_plot(self, name, fn, data_gen=None, data_gen_params={}):
-        self._add_step(name=name, inst=None, fn_or_method=fn, plot=True, data_gen=data_gen, data_gen_params=data_gen_params)
+    def add_step_fn_plot(self, name, fn, help='', what_data_gen='RAW_DATA_GEN', data_gen=None, data_gen_params={}):
+        self._add_step(name=name, inst=None, fn_or_method=fn, plot=True, help=help, what_data_gen=what_data_gen, data_gen=data_gen, data_gen_params=data_gen_params)
         
-    def add_step_fn(self, name, fn,data_gen=None, data_gen_params={}):
-        self._add_step(name=name, inst=None, fn_or_method=fn, plot=False, data_gen=data_gen, data_gen_params=data_gen_params)
+    def add_step_fn(self, name, fn, help='', what_data_gen='RAW_DATA_GEN', data_gen=None, data_gen_params={}):
+        self._add_step(name=name, inst=None, fn_or_method=fn, plot=False, help=help, what_data_gen=what_data_gen, data_gen=data_gen, data_gen_params=data_gen_params)
 
-    def add_step_method_plot(self, inst, method, data_gen=None, data_gen_params={}):
-        self._add_step(name=name, inst=inst, fn_or_method=method, plot=True, data_gen=data_gen, data_gen_params=data_gen_params)
+    def add_step_method_plot(self, inst, method, help='', what_data_gen='RAW_DATA_GEN', data_gen=None, data_gen_params={}):
+        self._add_step(name=name, inst=inst, fn_or_method=method, plot=True, help=help, what_data_gen=what_data_gen, data_gen=data_gen, data_gen_params=data_gen_params)
 
-    def add_step_method(self, inst, method, fn,data_gen=None, data_gen_params={}):
-        self._add_step(name=name, inst=inst, fn_or_method=method, plot=False, data_gen=data_gen, data_gen_params=data_gen_params)
+    def add_step_method(self, inst, method, fn, help='', what_data_gen='RAW_DATA_GEN', data_gen=None, data_gen_params={}):
+        self._add_step(name=name, inst=inst, fn_or_method=method, plot=False, help=help, what_data_gen=what_data_gen, data_gen=data_gen, data_gen_params=data_gen_params)
     
+    def add_step_fn_no_iter(self, name, fn, help=''):
+        self._add_step(name=name, inst=None, fn_or_method=fn,
+                       plot=False, help=help, what_data_gen='NO_DATA_GEN',
+                       data_gen=None,
+                       data_gen_params=None)
+
+    def add_step_fn_plot_no_iter(self, name, fn, help=''):
+        self._add_step(name=name, inst=None, fn_or_method=fn,
+                       plot=True, help=help, what_data_gen='NO_DATA_GEN',
+                       data_gen=None,
+                       data_gen_params=None)
+
     def trace(self, msg):
         util.logTrace(self.hdr, msg, self.doTrace)
 
@@ -135,37 +154,50 @@ class Pipeline(object):
             return True
         return False
 
+    def doClean(self):
+        self.trace("Cleaning output files")
+        for step in self.steps:
+            output_files = self.get_step_output_files(step)
+            for fname in output_files:
+                if os.path.exists(fname):
+                    os.unlink(fname)
+                    self.trace("step=%s Deleted file: %s" % (step.name, fname))
+                else:
+                    self.trace("step=%s output file: %s doesn't exist" % (step.name, fname))
+
+
+    def validateConfig(self, config):
+        pass
+    
     def run(self):
         self._steps_fixed=True
         self._set_args_and_plt()
-        
         if self.args.clean:
-            self.trace("Cleaning output files")
-            for step in self.steps:
-                output_files = self.get_step_output_files(step)
-                for fname in output_files:
-                    if os.path.exists(fname):
-                        os.unlink(fname)
-                        self.trace("step=%s Deleted file: %s" % (step.name, fname))
-                    else:
-                        self.trace("step=%s output file: %s doesn't exist" % (step.name, fname))
+            return self.doClean()
+        
+        msg = "Running Pipeline"
+        if self.args.config:
+            self.config = yaml.load(file(args.config, 'r'))
+            self.validateConfig(self.config)
+            msg += " loaded config from %s" % args.config
         else:
-            self.trace("Running Pipeline")
-            step2h5list = {}
-            ran_last_step=True
-            for step in self.steps:
-                msg = str(step)
-                if step.plot:
-                    if self.do_plot_step(ran_last_step, step):
-                        msg += " -- running"
-                        self.trace(msg)
-                        step.run(step2h5list=step2h5list, output_files=None, plot=self.args.plot)
-                    else:
-                        self.trace(msg + " -- skipping plot step")
+            msg += " no config yml file given on command line."
+        self.trace(msg)
+        step2h5list = {}
+        ran_last_step=True
+        for step in self.steps:
+            msg = str(step)
+            if step.plot:
+                if self.do_plot_step(ran_last_step, step):
+                    msg += " -- running"
+                    self.trace(msg)
+                    step.run(step2h5list=step2h5list, output_files=None, plot=self.args.plot, num=self.args.num)
                 else:
-                    output_files = self.get_step_output_files(step)
-                    self.manage_step(step, step2h5list, output_files)
-                    step2h5list[step.name]= [h5py.File(fname,'r') for fname in output_files]
+                    self.trace(msg + " -- skipping plot step")
+            else:
+                output_files = self.get_step_output_files(step)
+                self.manage_step(step, step2h5list, output_files)
+                step2h5list[step.name]= output_files
 
     def manage_step(self, step, step2h5list, output_files):
         all_output_exists = all([os.path.exists(fname) for fname in output_files])
@@ -176,10 +208,37 @@ class Pipeline(object):
             if any_output_exists and not self.args.force:
                 raise Exception("Some of the output files: %s already exist, use --force to overwrite" % step)
             self.trace("running step=%s" % step)
-            step.run(step2h5list, output_files)
+            step.run(step2h5list, output_files, num=self.args.num)
             for fname in output_files:
                 assert os.path.exists(fname), "step=%s did not create output file: %s" % (step, fname)
-                
+
+    def stop_plots(self):
+        self.plt.pause(.1)
+        if raw_input('hit enter or q to quit plots (for this step)').lower().strip()=='q':
+            return True
+        return False
+    
+    def get_config(self, name):
+        '''returns dict of options, command line args override config object, apply to all names
+        '''
+        args = self.args
+        config = self.config
+        if not config:
+            self.trace("get_config(%s). No yaml config. All config from args." % name)
+            config = {}
+        if config and not name in config:
+            self.trace("get_config(%s). yaml config present, but no config for step. All config from args." % name)
+            config = {}
+        if config and name in config:
+            config = copy.deepcopy(config[name])
+
+        for ky,val in vars(args).iteritems():
+            if ky in config:
+                self.trace("  get_config(%s). overwrite yaml config key %s with value from args" % \
+                           (name, key))
+            config[ky]=val
+        return config
+
     def _set_args_and_plt(self):
         descr = "pipeline for managing sequence of analysis steps. The steps are:\n"
         for step in self.steps:
