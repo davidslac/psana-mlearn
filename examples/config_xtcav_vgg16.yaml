@@ -1,0 +1,20 @@
+init:
+  ver: "3.2.3"
+
+prepare_for_vgg16:
+  thresh: 120.0 
+#  thresh: 154.0
+
+tsne_imgs:
+  # it is too slow to do tsne on the original images,
+  # pick a subset and resize them
+  num: 2000
+  resize: (100,100)
+  initial_dims: 50
+  perplexity: 30.0
+
+tsne_cws:
+  num: 2000
+  initial_dims: 50
+  perplexity: 30.0
+  

@@ -3,6 +3,7 @@ from __future__ import division
 from __future__ import print_function
 
 import os
+import sys
 import copy
 import psmlearn.util as util
 
@@ -46,9 +47,9 @@ class Step(object):
         return msg
 
     def run(self, step2h5list, output_files, plot=0, num=0):
+        '''a step is called with a signature depending on how it was added. For instance:
+        '''
         kwargs = {}
-        if self.isMethod():
-            kwargs['self'] = self.inst
 
         data_iter = None
         if self.what_data_gen == 'NO_DATA_GEN':
@@ -80,4 +81,8 @@ class Step(object):
         kwargs['step2h5list'] = step2h5list
 
         util.logDebug(hdr='Step.run', msg='running: %s - kwargs=%s' % (self, kwargs))
-        self.fn_or_method(**kwargs)
+        try:
+            self.fn_or_method(**kwargs)
+        except TypeError, exp:
+            sys.stderr.write("Could not call step. isMethod=%r passed args=%r\n" % (self.isMethod(),kwargs.keys()))
+            raise exp

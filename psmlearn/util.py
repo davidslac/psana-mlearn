@@ -90,3 +90,16 @@ def get_best_correct_one_hot(scores, truth, label):
     best_score = np.max(scores)
     row = orig_rows[np.argmax(scores)]
     return row, best_score
+
+def replaceWithLogIfAbove(img,thresh):
+    replace = img >= thresh
+    newval = np.log(1.0 + img[replace] - thresh)
+    img[replace]=thresh + newval
+
+def replicate(img, numChannels, dtype):
+    assert len(img.shape)==2
+    repShape = list(img.shape)+[numChannels]
+    rep = np.empty(repShape, dtype)
+    for ch in range(numChannels):
+        rep[:,:,ch] = img[:]
+    return rep

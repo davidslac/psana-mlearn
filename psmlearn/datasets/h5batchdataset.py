@@ -2,11 +2,17 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import os
+import glob
+import random
+import numpy as np
+
 import h5minibatch
 assert h5minibatch.__version__=='0.0.4'
 from h5minibatch import H5BatchReader
 
 from . dataset import Dataset
+from . import dataloc
 from .. import util
 
 class H5BatchDataset(Dataset):
@@ -46,10 +52,33 @@ class H5BatchDataset(Dataset):
                                   verbose=verbose)
 
     def split(self, **kwargs):
+        seed = kwargs.pop('seed', None)
+        if seed is not None:
+            pystate = random.getstate()
+            npstate = np.random.get_state()
+            random.seed(seed)
+            np.random.seed(seed)
+            
         self.h5br.split(**kwargs)
 
+        if seed is not None:
+            random.setstate(pystate)
+            np.random.set_state(npstate)
+
     def train_iter(self, **kwargs):
+        seed = kwargs.pop('seed', None)
+        if seed is not None:
+            pystate = random.getstate()
+            npstate = np.random.get_state()
+            random.seed(seed)
+            np.random.seed(seed)
+            
         h5br_iter = self.h5br.train_iter(**kwargs)
+
+        if seed is not None:
+            random.setstate(pystate)
+            np.random.set_state(npstate)
+            
         return H5BatchDatasetIterWrapper(h5br_iter, self)
 
     def validation_iter(self, **kwargs):
@@ -59,6 +88,18 @@ class H5BatchDataset(Dataset):
     def test_iter(self, **kwargs):
         h5br_iter = self.h5br.test_iter(**kwargs)
         return H5BatchDatasetIterWrapper(h5br_iter, self)
+
+    def getH5filesFromOneGlobPattern(self, project, subproject, testmode, globmatch):
+        subprojectDir = dataloc.getSubProjectDir(project=project, subproject=subproject)
+        hdf5 = os.path.join(subprojectDir, 'hdf5')
+        assert os.path.exists(hdf5), "dir %s doesn't exist" % hdf5
+        globpath=os.path.join(hdf5, globmatch)
+        h5files = glob.glob(globpath)
+        assert len(h5files)>0, "didn't get any files from %s" % globpath
+        if testmode:
+            random.shuffle(h5files)
+            h5files = h5files[0:3]
+        return h5files
 
 class H5BatchDatasetIterWrapper(object):
     def __init__(self, h5batch_iter, h5batchDataset):
