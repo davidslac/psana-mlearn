@@ -25,5 +25,5 @@ class ChuckVirusDataset(H5BatchDataset):
                                 X=['adu'],
                                 Y_to_onehot=['labels'],
                                 Y_onehot_num_outputs=[2],
-                                meta=[],
+                                meta_dset_names=[],
                                 )

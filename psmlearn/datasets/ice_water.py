@@ -34,7 +34,7 @@ class IceWaterDataset(H5BatchDataset):
                                 X=['data'],
                                 Y_to_onehot=['label'],
                                 Y_onehot_num_outputs=[2],
-                                meta=[],
+                                meta_dset_names=[],
                                 )
 
 

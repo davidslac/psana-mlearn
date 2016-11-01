@@ -41,7 +41,7 @@ class Pipeline(object):
     '''
     def __init__(self,
                  outputdir='.',
-                 inst=None,
+                 stepImpl=None,
                  description='',
                  epilog='',
                  session=None,
@@ -49,7 +49,7 @@ class Pipeline(object):
                  comm=None):
         self.initialized = False
         self.outputdir = outputdir
-        self.inst = inst
+        self.stepImpl = stepImpl
         self.description=description
         self.epilog=epilog
         self.session = session
@@ -61,7 +61,7 @@ class Pipeline(object):
         self.steps = []
         self.name2step = {}
         self._steps_fixed = False
-        
+
         if self.session is None:
             self.session = tf.InteractiveSession()
             
@@ -75,9 +75,10 @@ class Pipeline(object):
         
     def _add_step(self,
                   name,
-                  inst,
+                  stepImpl,
                   fn_or_method,
                   plot, help,
+                  output_files,
                   what_data_gen,
                   data_gen,
                   data_gen_params):
@@ -93,14 +94,17 @@ class Pipeline(object):
                 data_gen = self.default_data_gen
             if not data_gen_params:
                 data_gen_params = self.default_data_gen_params
-        output_suffixes= [name + '.h5']
+        if len(output_files)==0:
+            output_suffixes= [name + '.h5']
+        else:
+            output_suffixes= [name + extra + '.h5' for extra in output_files]
         for step in self.steps:
             for suffix in step.output_suffixes:
                 assert suffix not in output_suffixes, "step %s has output suffix=%s that collides with suffix for step %s" % (name, suffix, step.name)
         # separate step figH by 10 so they can make up to 10 plots without colliding
         plotFigH = len(self.steps)*10
         step = Step(name=name,
-                    inst=inst, fn_or_method=fn_or_method,
+                    stepImpl=stepImpl, fn_or_method=fn_or_method,
                     what_data_gen=what_data_gen,
                     data_gen=data_gen,
                     data_gen_params=data_gen_params,
@@ -113,56 +117,58 @@ class Pipeline(object):
         self.parser.add_argument('--%s' % name, action='store_true', help='just execute step %s' % name, default=False)
         
     def add_step_fn_plot(self, name, fn, help='', what_data_gen='RAW_DATA_GEN', data_gen=None, data_gen_params={}):
-        self._add_step(name=name, inst=None, fn_or_method=fn, plot=True, help=help, what_data_gen=what_data_gen, data_gen=data_gen, data_gen_params=data_gen_params)
+        self._add_step(name=name, stepImpl=None, fn_or_method=fn, plot=True, output_files=[], help=help, what_data_gen=what_data_gen, data_gen=data_gen, data_gen_params=data_gen_params)
         
     def add_step_fn(self, name, fn, help='', what_data_gen='RAW_DATA_GEN', data_gen=None, data_gen_params={}):
-        self._add_step(name=name, inst=None, fn_or_method=fn, plot=False, help=help, what_data_gen=what_data_gen, data_gen=data_gen, data_gen_params=data_gen_params)
+        self._add_step(name=name, stepImpl=None, fn_or_method=fn, plot=False, output_files=[],  help=help, what_data_gen=what_data_gen, data_gen=data_gen, data_gen_params=data_gen_params)
 
     def add_step_method_plot(self, name, help=''):
-        inst=self.inst
-        method = getattr(inst, name)
+        stepImpl=self.stepImpl
+        method = getattr(stepImpl, name)
         self._add_step(name=name,
-                       inst=inst,
+                       stepImpl=stepImpl,
                        fn_or_method=method,
                        plot=True,
                        help=help,
+                       output_files=[], 
                        what_data_gen='NO_DATA_GEN',
                        data_gen=None,
                        data_gen_params=None)
 
-    def add_step_method(self, name, help=''):
-        inst=self.inst
-        method = getattr(inst, name)
+    def add_step_method(self, name, output_files=[], help=''):
+        stepImpl=self.stepImpl
+        method = getattr(stepImpl, name)
         self._add_step(name=name,
-                       inst=inst,
+                       stepImpl=stepImpl,
                        fn_or_method=method,
                        plot=False,
                        help=help,
+                       output_files=output_files,
                        what_data_gen='NO_DATA_GEN',
                        data_gen=None,
                        data_gen_params=None)
     
     def add_step_fn_no_iter(self, name, fn, help=''):
-        self._add_step(name=name, inst=None, fn_or_method=fn,
+        self._add_step(name=name, stepImpl=None, fn_or_method=fn,
                        plot=False, help=help, what_data_gen='NO_DATA_GEN',
                        data_gen=None,
                        data_gen_params=None)
 
     def add_step_fn_plot_no_iter(self, name, fn, help=''):
-        self._add_step(name=name, inst=None, fn_or_method=fn,
+        self._add_step(name=name, stepImpl=None, fn_or_method=fn,
                        plot=True, help=help, what_data_gen='NO_DATA_GEN',
                        data_gen=None,
                        data_gen_params=None)
 
-    def trace(self, msg):
-        util.logTrace(self.hdr, msg, self.doTrace)
+    def trace(self, msg, checkcache=True):
+        util.logTrace(hdr=self.hdr, msg=msg, checkcache=checkcache, flag=self.doTrace)
 
     def warning(self, msg):
         sys.stderr.write("WARNING: %s: %s\n" % (self.hdr, msg))
         sys.stderr.flush()
         
-    def debug(self, msg):
-        util.logDebug(self.hdr, msg, self.doDebug)
+    def debug(self, msg, checkcache=True):
+        util.logDebug(hdr=self.hdr, msg=msg, checkcache=checkcache, flag=self.doDebug)
 
     def get_step_output_files(self, step):
         assert self.args is not None, "arguments not parsed"
@@ -227,9 +233,9 @@ class Pipeline(object):
             msg += " no config yml file given on command line."
         self.trace(msg)
         
-        if self.inst is not None:
+        if self.stepImpl is not None:
             config = self.get_config(name='init')
-            self.inst.init(config=config, pipeline=self)
+            self.stepImpl.init(config=config, pipeline=self)
 
     def run(self):
         config = self.init()
@@ -295,7 +301,7 @@ class Pipeline(object):
         for ky,val in vars(args).iteritems():
             if hasattr(nameConfig, ky):
                 self.trace("  get_config(%s). overwrite yaml config key %s with value from args" % \
-                           (name, key))
+                           (name, ky))
             setattr(nameConfig,ky,val)
         return nameConfig
 

@@ -129,7 +129,7 @@ class ImgMLearnDataset(H5BatchDataset):
         if predict:
             Y = []
 
-        meta = getXtcMetaInH5()
+        meta_dset_names = getXtcMetaInH5()
         subprojectDir = dataloc.getSubProjectDir(project=project, subproject=subproject)
         h5files = self.getH5files(subprojectDir, predict, Y, testmode)
         h5br_X = ['xtcavimg']
@@ -148,7 +148,7 @@ class ImgMLearnDataset(H5BatchDataset):
                                 Y            = h5br_Y,
                                 Y_to_onehot  = h5br_Y_to_onehot,
                                 Y_onehot_num_outputs = hbr_Y_onehot_num_outputs,
-                                meta         = meta,
+                                meta_dset_names         = meta_dset_names,
                                 include_if_one_mask_datasets=include_if_one_mask_datasets,
                                 exclude_if_negone_mask_datasets=exclude_if_negone_mask_datasets)
 

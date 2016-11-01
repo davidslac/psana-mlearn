@@ -14,14 +14,14 @@ WHAT_DATA_GEN=['NO_DATA_GEN',  # there won't be one
 ]
 
 class Step(object):
-    def __init__(self, name, inst, fn_or_method,
+    def __init__(self, name, stepImpl, fn_or_method,
                  what_data_gen = 'NO_DATA_GEN',
                  data_gen=None, data_gen_params={},
                  plot=False, plotFigH=0,
                  pipeline=None, output_suffixes=None):
         assert what_data_gen in WHAT_DATA_GEN, "The what_data_gen must be one of %s" % WHAT_DATA_GEN
         self.name = name
-        self.inst=inst
+        self.stepImpl=stepImpl
         self.fn_or_method = fn_or_method
         self.what_data_gen = what_data_gen
         self.data_gen = data_gen
@@ -34,7 +34,7 @@ class Step(object):
             assert self.data_gen, "what_data_gen specifies data_generator, but data_gen arg not set"
             
     def isMethod(self):
-        return self.inst != None
+        return self.stepImpl != None
 
     def redo(self, args):
         return getattr(args, self.name)
@@ -81,8 +81,8 @@ class Step(object):
         kwargs['step2h5list'] = step2h5list
 
         util.logDebug(hdr='Step.run', msg='running: %s - kwargs=%s' % (self, kwargs))
-        try:
-            self.fn_or_method(**kwargs)
-        except TypeError, exp:
-            sys.stderr.write("Could not call step. isMethod=%r passed args=%r\n" % (self.isMethod(),kwargs.keys()))
-            raise exp
+        self.fn_or_method(**kwargs)
+#        except TypeError, exp:
+#            sys.stderr.write("Could not call step. isMethod=%r passed args=%r\n" % (self.isMethod(),kwargs.keys()))
+#            self.fn_or_method(**kwargs)
+    
