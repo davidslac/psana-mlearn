@@ -6,6 +6,8 @@ import os
 import glob
 import random
 
+import h5py
+
 from h5minibatch import DataSetGroup as H5DataSetGroup
 
 from  . import dataloc
@@ -106,7 +108,7 @@ class ImgMLearnDataset(H5BatchDataset):
                  X='---',
                  Y='---',
                  predict=False,
-                 testmode=False):
+                 dev=False):
 
         name="ImgMLearnDataset(project=%s subproject=%s, X=%s, Y=%s, predict=%s)" % \
             (project, subproject, X, Y, predict)
@@ -131,7 +133,7 @@ class ImgMLearnDataset(H5BatchDataset):
 
         meta_dset_names = getXtcMetaInH5()
         subprojectDir = dataloc.getSubProjectDir(project=project, subproject=subproject)
-        h5files = self.getH5files(subprojectDir, predict, Y, testmode)
+        h5files = self.getH5files(subprojectDir, predict, Y, dev)
         h5br_X = ['xtcavimg']
         h5br_X_dset_groups, include_if_one_mask_datasets = self.get_X_dset_groups_and_include(X, predict)
         h5br_Y_to_onehot, hbr_Y_onehot_num_outputs, exclude_if_negone_mask_datasets = self.get_Y_onehot_and_exclude(Y)
@@ -148,6 +150,7 @@ class ImgMLearnDataset(H5BatchDataset):
                                 Y            = h5br_Y,
                                 Y_to_onehot  = h5br_Y_to_onehot,
                                 Y_onehot_num_outputs = hbr_Y_onehot_num_outputs,
+                                dev = dev,
                                 meta_dset_names         = meta_dset_names,
                                 include_if_one_mask_datasets=include_if_one_mask_datasets,
                                 exclude_if_negone_mask_datasets=exclude_if_negone_mask_datasets)
@@ -188,8 +191,18 @@ class ImgMLearnDataset(H5BatchDataset):
             numOutputs = 2
             return ['lasing'],[numOutputs], []
         return [],[], []
-            
-    def getH5files(self, subprojectDir, predict, Y, testmode):
+
+    def get_image(self, meta, files):
+        filenum=meta['file'][0]
+        row=meta['row'][0]
+        filename=files[filenum]
+        h5=h5py.File(filename,'r')
+        for nm in ['evt.fiducials','evt.nanoseconds','evt.seconds','run','run.index']:
+            assert h5[nm][row]==meta[nm][0], "get_image: filenum=%d row=%d filename=%s: meta[%s]=%s != h5[%s][%d]=%s. meta=%r" % \
+            (filenum, row, filename, nm, meta[nm][0], nm, row, h5[nm][row], meta)
+        return h5['xtcavimg'][row,:]
+        
+    def getH5files(self, subprojectDir, predict, Y, dev):
         runs = [70,71]
         globmatch = 'amo86815_mlearn-r%3.3d-c*.h5'
         if Y=='lasing':
@@ -207,9 +220,11 @@ class ImgMLearnDataset(H5BatchDataset):
             assert len(newh5files)>0, "didn't get any files from %s" % globpath
             h5files.extend(newh5files)
 
-        if testmode:
-            random.shuffle(h5files)
-            h5files = h5files[0:3]
+        if dev:
+            if predict:
+                h5files = [os.path.join(hdf5, 'amo86815_pred-r072-c0000.h5')]
+            else:
+                h5files = [os.path.join(hdf5, 'amo86815_mlearn-r071-c0000.h5')]
 
         return h5files
         

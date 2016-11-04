@@ -26,7 +26,7 @@ def _addPipelineArgs(parser, outputdir):
     parser.add_argument('prefix', type=str, help='prefix for filenames')
     parser.add_argument('--redoall', action='store_true', help='redo all steps', default=False)
     parser.add_argument('--outputdir', type=str, help='output directory default=%s' % outputdir, default=outputdir)
-    parser.add_argument('--num', type=int, help='number of samples to do, default is all', default=0)
+    parser.add_argument('--dev', action='store_true',help='develop mode, for shortening datasets, load times, etc.')
     parser.add_argument('--seed', type=int, help='seed for random number generators', default=39819)
     parser.add_argument('--plot', type=int, help='plot level. default=0, no plots, 1 means detailed', default=0)
     parser.add_argument('--log', type=str, help='one of DEBUG,INFO,WARN,ERROR,CRITICAL.', default='DEBUG')
@@ -252,7 +252,7 @@ class Pipeline(object):
                 if self.do_plot_step(ran_last_step, step):
                     msg += " -- running"
                     self.trace(msg)
-                    step.run(step2h5list=step2h5list, output_files=None, plot=self.args.plot, num=self.args.num)
+                    step.run(step2h5list=step2h5list, output_files=None, plot=self.args.plot)
                 else:
                     self.trace(msg + " -- skipping plot step")
             else:
@@ -269,7 +269,7 @@ class Pipeline(object):
             if any_output_exists and not self.args.force:
                 raise Exception("Some of the output files: %s already exist, use --force to overwrite" % step)
             self.trace("running step=%s" % step)
-            step.run(step2h5list, output_files, num=self.args.num)
+            step.run(step2h5list, output_files)
             for fname in output_files:
                 assert os.path.exists(fname), "step=%s did not create output file: %s" % (step, fname)
 

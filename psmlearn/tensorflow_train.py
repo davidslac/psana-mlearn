@@ -160,7 +160,7 @@ class ClassificationTrainer(object):
         msg += ' loss=%.3e' % train_info['loss']
         msg += ' opt_loss=%.3e' % train_info['opt_loss']
         msg += ' tr.acc=%.2f' % train_info['acc']
-        msg += ' lr=%.3e' % train['learning_rate']
+        msg += ' lr=%.3e' % train_info['learning_rate']
         train_cmat = train_info['cmat']
         if eval_info is not None:
             msg += ' ev.acc=%.2f' % eval_info['acc']
@@ -196,14 +196,16 @@ class ClassificationTrainer(object):
             batches += 1
             X=Xlist[0]
             Y=Ylist[0]
+            assert np.sum(Y)==Y.shape[0], "Y=%r" % Y
             feed_dict=self.model.get_validation_feed_dict(X=X,Y=Y)
             ops = [self.model.logits]
             logits, = self.sess.run(ops, feed_dict=feed_dict)
+            assert logits.shape[0]==Y.shape[0]
             logits_all.append(logits)
             Y_all.append(Y)
         logits_all = np.concatenate(logits_all)
         Y_all = np.concatenate(Y_all)
-        
+        assert logits_all.shape[0]==Y_all.shape[0]
             
         if self.batches_per_validation_epoch is None:
             self.batches_per_validation_epoch = batches

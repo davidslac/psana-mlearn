@@ -50,6 +50,7 @@ def get_confusion_matrix_one_hot(model_results, truth):
     where truth is 0/1, and max along each row of model_results is model result
     '''
     assert model_results.shape == truth.shape
+    assert np.sum(truth)==truth.shape[0]
     num_outputs = truth.shape[1]
     confusion_matrix = np.zeros((num_outputs, num_outputs), dtype=np.int32)
     predictions = np.argmax(model_results,axis=1)
@@ -61,8 +62,8 @@ def get_confusion_matrix_one_hot(model_results, truth):
         for predicted_class in range(num_outputs):
             count = np.sum(prediction_for_this_class==predicted_class)
             confusion_matrix[actual_class, predicted_class] = count
-    assert np.sum(confusion_matrix)==len(truth)
-    assert np.sum(confusion_matrix)==np.sum(truth)
+    assert np.sum(confusion_matrix)==len(truth), "np.sum(confusion_matrix)=%d !=len(truth)=%d, cmat=%r truth=%r" % \
+        (np.sum(confusion_matrix), len(truth), confusion_matrix, truth)
     return confusion_matrix
 
 def cmat2str(confusion_matrix, fmtLen=None):

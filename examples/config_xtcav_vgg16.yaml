@@ -5,6 +5,9 @@ prepare_for_vgg16:
   thresh: 100.0
 #  thresh: 154.0
 
+compute_channel_mean:
+  num_to_sample: 4000
+  
 tsne_imgs:
   # it is too slow to do tsne on the original images,
   # pick a subset and resize them
@@ -37,6 +40,13 @@ train_on_codewords:
   optimizer: momentum
   optimizer_param_momentum: 0.85
   
-activations:
-  batchsize: 128
+vgg16_output:
+  num_samples: 2000
+
+neurons:
+  topn: 2
+
+gbprop:
+  layer_from: 'pool5'  # would like to implement 'fc2', 'fc1', 'pool5'
+  images_per_label: 10
   

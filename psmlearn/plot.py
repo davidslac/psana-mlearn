@@ -17,7 +17,6 @@ def plotRowsLabelSort(dataLoc, labelsLoc, plt=None):
 
 def _imshowImg(plt, img):
     if len(img.shape)==3:
-        print("hi!")
         mn = np.min(img)
         mx = np.max(img)
         plt_img = img - mn

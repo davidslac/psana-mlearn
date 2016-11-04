@@ -5,6 +5,8 @@ from __future__ import print_function
 import os
 import sys
 import copy
+import inspect
+import traceback
 import psmlearn.util as util
 
 # define different kinds of data generators.
@@ -46,7 +48,7 @@ class Step(object):
             msg += ' output=%s' % ','.join(self.output_suffixes)
         return msg
 
-    def run(self, step2h5list, output_files, plot=0, num=0):
+    def run(self, step2h5list, output_files, plot=0):
         '''a step is called with a signature depending on how it was added. For instance:
         '''
         kwargs = {}
@@ -81,8 +83,20 @@ class Step(object):
         kwargs['step2h5list'] = step2h5list
 
         util.logDebug(hdr='Step.run', msg='running: %s - kwargs=%s' % (self, kwargs))
-        self.fn_or_method(**kwargs)
-#        except TypeError, exp:
-#            sys.stderr.write("Could not call step. isMethod=%r passed args=%r\n" % (self.isMethod(),kwargs.keys()))
-#            self.fn_or_method(**kwargs)
+        argspec = inspect.getargspec(self.fn_or_method)
+        args = copy.deepcopy(argspec[0])
+        for nm in kwargs.keys():
+            assert nm in args, "kwargs constructed for step=%s are: %s, but %s is not in argspec: %s" % (self, kwargs.keys(), nm, argspec)
+            args.remove(nm)
+        if self.isMethod():
+            assert 'self' in args, "step %s is a method, but argspec=%s doesn't have 'self'" % (self, argspec)
+        try:
+            self.fn_or_method(**kwargs)
+        except Exception, exp:
+            traceback.print_exc()
+            for fname in output_files:
+                if os.path.exists(fname):
+                    sys.stderr.write("WARNING: step: %s failed, deleting output file: %s\n" % (self, fname))
+                    os.unlink(fname)
+            raise exp
     

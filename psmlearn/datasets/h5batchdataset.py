@@ -23,6 +23,7 @@ class H5BatchDataset(Dataset):
                  Y=[], Y_to_onehot=[],
                  Y_onehot_num_outputs = [],
                  meta_dset_names=[],
+                 dev=False,
                  add_batch_info_to_meta=True,
                  include_if_one_mask_datasets=[],
                  exclude_if_negone_mask_datasets=[]):
@@ -32,7 +33,8 @@ class H5BatchDataset(Dataset):
                          subproject=subproject, 
                          verbose=verbose, 
                          descr=descr,
-                         name=name)
+                         name=name,
+                         dev=dev)
         assert len(h5files)>0        
         self.h5files = h5files
         self.X=X
@@ -84,7 +86,16 @@ class H5BatchDataset(Dataset):
         h5br.split(train=100,validation=0,test=0)
         new_iter = h5br.train_iter(**kwargs)
         return IterFromWrapper(new_iter, X, Y)
+
+    def num_samples_train(self):
+        return self.h5br.num_samples_train()
     
+    def num_samples_validation(self):
+        return self.h5br.num_samples_validation()
+
+    def num_samples_test(self):
+        return self.h5br.num_samples_test()
+
     def train_iter(self, **kwargs):
         seed = kwargs.pop('seed', None)
         if seed is not None:
@@ -179,6 +190,9 @@ class IterFromWrapper(object):
     def __iter__(self):
         return self
 
+    def shuffle(self):
+        self.data_iter.samples.shuffle()
+        
     def next(self):
         batch = self.data_iter.next()
         batchinfo = unpack_batchinfo(batch)
@@ -194,6 +208,12 @@ class H5BatchDatasetIterWrapper(object):
 
     def get_h5files(self):
         return self.h5batch_iter.get_h5files()
+
+    def __len__(self):
+        return len(self.h5batch_iter)
+
+    def samplesPerEpoch(self):
+        return self.h5batch_iter.samplesPerEpoch()
     
     def unpack_XYmeta(self, batch):
         return unpack_XYmeta(batch=batch,

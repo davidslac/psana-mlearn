@@ -22,17 +22,23 @@ from scipy.misc import imresize
 import h5py
 
 class vgg16:
-    def __init__(self, imgs, weights=None, sess=None, trainable=False, stop_at_fc2=False):
+    def __init__(self, imgs, weights=None, sess=None, trainable=False, stop_at_fc2=False, dev=False):
         self.imgs = imgs
+        self.dev = dev
+        self.__dev_cache_layer2shape={}
         self.stop_at_fc2=stop_at_fc2
         self.trainable=trainable
         self.after_relus = []
+        self._gbprop_pool5_op = None
+        self._saliency_pool5_op = None
+        self._pl_pool5 = tf.placeholder(dtype=tf.float32, shape=(None,7,7,512))
+        
         self.convlayers(trainable)
         self.fc_layers(trainable)
         if not self.stop_at_fc2:
             self.probs = tf.nn.softmax(self.fc3l)
         if weights is not None and sess is not None:
-            self.load_weights(weights, sess)
+            self.load_weights(weights, sess, dev)
         self.layer_name_to_op = {'conv1_1':self.conv1_1,
                                  'conv1_2':self.conv1_2,
                                  'pool1':self.pool1,
@@ -300,7 +306,11 @@ class vgg16:
             self.fc3l = tf.nn.bias_add(tf.matmul(self.fc2, fc3w), fc3b)
             self.parameters += [fc3w, fc3b]
 
-    def load_weights(self, weight_file, sess):
+    def load_weights(self, weight_file, sess, dev):
+        if dev:
+            sess.run(tf.initialize_variables(self.parameters))
+            return
+        
         weights = np.load(weight_file)
         keys = sorted(weights.keys())
         for i, k in enumerate(keys):
@@ -310,9 +320,68 @@ class vgg16:
             print( i, k, np.shape(weights[k]))
             sess.run(self.parameters[i].assign(weights[k]))
 
+    def get_W_B(self, name):
+        assert name in ['fc2','fc1']
+        if name == 'fc2':
+            W = self.parameters[-4].eval()
+            B = self.parameters[-3].eval()
+            assert self.parameters[-4].name.startswith('fc2/weights')
+            assert self.parameters[-3].name.startswith('fc2/biases')
+        elif name == 'fc1':
+            W = self.parameters[-6].eval()
+            B = self.parameters[-5].eval()
+            assert self.parameters[-6].name.startswith('fc1/weights')
+            assert self.parameters[-5].name.startswith('fc1/biases')
+        return W,B
+        
     def get_model_layers(self, sess, imgs, layer_names):
         ops = [self.layer_name_to_op[name] for name in layer_names]
-        return sess.run(ops, feed_dict={self.imgs:imgs})
+        if self.dev:
+            present = [name in self.__dev_cache_layer2shape for name in layer_names]
+            if all(present):
+                N = imgs.shape[0]
+                arrs = []
+                for name in layer_names:
+                    shape = tuple([N] + list(self.__dev_cache_layer2shape[name]))
+                    arrs.append(np.random.random(shape))
+                return arrs
+            
+        arrs = sess.run(ops, feed_dict={self.imgs:imgs})
+        if self.dev:
+            for name, arr in zip(layer_names, arrs):
+                self.__dev_cache_layer2shape[name]=arr.shape[1:]
+        return arrs
+
+    def gbprop_op_pool5(self):
+        if self._gbprop_pool5_op is None:
+            relus = [op for op in self.after_relus]
+            relus.pop()  # fc2
+            relus.pop()  # fc1
+
+            ## check that it is the relu before the max pooling for pool5
+            assert relus[-1].get_shape().as_list()==[None, 14,14,512], "whoops! relus[-1]=%s does not have shape [None,14,14,512]" % self.relus[-1]
+        
+            yy = self.pool5
+            grad_ys = self._pl_pool5
+
+            while len(relus):
+                xx = relus.pop()
+                dyy_xx = tf.gradients(ys=yy, xs=xx, grad_ys=grad_ys)[0]
+                grad_ys = tf.nn.relu(dyy_xx)
+                print(grad_ys)
+                print(xx)
+                print(dyy_xx)
+                print(yy)
+                yy = xx
+            self._gbprop_pool5_op = tf.gradients(ys=yy, xs=self.imgs, grad_ys=grad_ys)[0]
+        return self._gbprop_pool5_op, self._pl_pool5
+
+    def saliency_op_pool5(self):
+        if self._saliency_pool5_op is None:
+            op = tf.gradients(ys=self.pool5, xs=self.imgs, grad_ys=self._pl_pool5)[0]
+            print(op)
+            self._saliency_pool5_op = op
+        return self._saliency_pool5_op, self._pl_pool5
     
 def load_image_for_vgg16(dest, img, dbg=False):
     assert dest.shape == (224,224,3)
@@ -349,41 +418,6 @@ def load_image_for_vgg16(dest, img, dbg=False):
         plt.pause(.1)
     return
 
-def create(session, weights):
+def create(session, weights, dev=False):
     imgs = tf.placeholder(tf.float32, [None, 224, 224, 3])
-    return vgg16(imgs=imgs, weights=weights, sess=session)
-
-def write_codewords(img_iter, h5, dset_name, 
-                    weights='vgg16_weights.npz', dbg=False):
-    dataReader.loadall(reload=False)
-    dataReader.check_processed_means()
-    num_samples = dataReader.get_number_of_samples()
-    assert (not os.path.exists(output_fname)) or force, "write_codewords: output file %s exists, use --force" % output_fname
-    print("psmlearn.vgg16.write_codewords: creating file %s\n  dataReader=%r" % (output_fname, dataReader))
-    h5out = h5py.File(output_fname,'w')
-    dataReader.copy_to_h5(h5out)
-    sess = tf.Session()
-
-    codeword_datasets = {}
-    for nm in dataReader.names():
-        nm_codewords_1 = np.zeros((num_samples,4096), dtype=np.float32)
-        nm_codewords_2 = np.zeros((num_samples,4096), dtype=np.float32)
-        for row in range(num_samples):
-            nm_img = np.zeros((224,224,3), dtype=np.float32)
-            load_image_for_vgg16(nm_img, dataReader.get_image(nm, row), dbg=dbg)
-            codewords = sess.run([vgg.fc1, vgg.fc2], feed_dict={vgg.imgs: [nm_img]})
-            codeword1, codeword2 = codewords
-            nm_codewords_1[row,:] = codeword1[:]
-            nm_codewords_2[row,:] = codeword2[:]
-            print("nm=%s row=%d" % (nm, row))
-            if dbg:
-                assert 'q' != raw_input('hit enter or q to quit').strip(), 'quiting'
-            sys.stdout.flush()
-        nm_ds1 ='%s_codeword1' % nm 
-        nm_ds2 ='%s_codeword2' % nm 
-        h5out[nm_ds1] = nm_codewords_1
-        h5out[nm_ds2] = nm_codewords_2
-        codeword_datasets[nm]=(nm_ds1, nm_ds2)
-    h5out.close()
-
-    return codeword_datasets
+    return vgg16(imgs=imgs, weights=weights, sess=session, dev=dev)
